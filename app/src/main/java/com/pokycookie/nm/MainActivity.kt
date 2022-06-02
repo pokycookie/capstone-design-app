@@ -18,13 +18,14 @@ import androidx.annotation.RequiresApi
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
+import androidx.recyclerview.widget.LinearLayoutManager
 import com.pokycookie.nm.databinding.ActivityMainBinding
 
 class MainActivity : AppCompatActivity() {
     private val binding by lazy { ActivityMainBinding.inflate(layoutInflater) }
-    private val receiver = BluetoothReceiver(this)
-
     private var bluetoothAdapter: BluetoothAdapter? = null
+    private var deviceList = mutableListOf<BluetoothData>()
+    private var pairedList = mutableListOf<BluetoothData>()
 
     lateinit var permissionLauncher: ActivityResultLauncher<String>
     lateinit var bluetoothConnectLauncher: ActivityResultLauncher<String>
@@ -43,7 +44,11 @@ class MainActivity : AppCompatActivity() {
         pairedDevice?.forEach { device ->
             val deviceName = device.name
             val deviceMAC = device.address
+            val result = BluetoothData(deviceName, deviceMAC)
+            pairedList.add(result)
         }
+
+        pairedList.add(BluetoothData("EX1", "0C:75:D2:AA"))
 
         val filter = IntentFilter().apply {
             addAction(BluetoothDevice.ACTION_FOUND)
@@ -63,6 +68,17 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // RecyclerView
+        var bluetoothRecyclerAdapter = RecyclerAdapter()
+        bluetoothRecyclerAdapter.deviceData = deviceList
+        binding.bluetoothRecycler.adapter = bluetoothRecyclerAdapter
+        binding.bluetoothRecycler.layoutManager = LinearLayoutManager(this)
+
+        var pairingRecyclerAdapter = RecyclerAdapter()
+        pairingRecyclerAdapter.deviceData = pairedList
+        binding.paringRecycler.adapter = pairingRecyclerAdapter
+        binding.paringRecycler.layoutManager = LinearLayoutManager(this)
+
         // Binding
         binding.bluetoothBtn.setOnClickListener {
             bluetoothConnectLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
@@ -72,17 +88,16 @@ class MainActivity : AppCompatActivity() {
             permissionLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
             bluetoothScanLauncher.launch(Manifest.permission.BLUETOOTH_SCAN)
         }
+        binding.bluetoothSearchingBar.isVisible = false
+        binding.noDeviceText.isVisible = true
 
         // Launcher
         permissionLauncher =
             registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
         bluetoothScanLauncher =
             registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
-                Log.d("debug", "SCAN: ${ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED}")
-                Log.d("debug", "FINE_LOCATION: ${ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED}")
-                Log.d("debug", "COARSE_LOCATION: ${ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED}")
                 if (isGranted && ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED) {
-                    Log.d("debug","discovery: ${bluetoothAdapter?.startDiscovery()}")
+                    bluetoothAdapter?.startDiscovery()
                 } else {
                     Log.d("permission", "BLUETOOTH_SCAN: false")
                 }
@@ -115,21 +130,36 @@ class MainActivity : AppCompatActivity() {
         unregisterReceiver(receiver)
     }
 
-//    class Receiver: BroadcastReceiver() {
-//
-//        override fun onReceive(context: Context, intent: Intent) {
-//            when(intent.action) {
-//                BluetoothDevice.ACTION_FOUND -> {
-//                    if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED) {
-//                        return
-//                    }
-//                    val device: BluetoothDevice? = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
-//                    val deviceName = device?.name
-//                    val deviceMAC = device?.address
-//                }
-//            }
-//        }
-//    }
+    private val receiver = object: BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            when(intent.action) {
+                BluetoothDevice.ACTION_FOUND -> {
+                    if (ActivityCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED) {
+                        return
+                    }
+                    val device: BluetoothDevice? = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+                    val deviceName = device?.name
+                    val deviceMAC = device?.address
+                    val result = BluetoothData(deviceName, deviceMAC)
+                    deviceList.add(result)
+                    Log.d("debug", "receiver result: $deviceName, $deviceMAC")
+                }
+                BluetoothAdapter.ACTION_DISCOVERY_STARTED -> {
+                    Log.d("debug", "searching...")
+                    deviceList.clear()
+                    binding.bluetoothSearchingBar.isVisible = true
+                    binding.noDeviceText.isVisible = false
+                }
+                BluetoothAdapter.ACTION_DISCOVERY_FINISHED -> {
+                    Log.d("debug", "search finished: $deviceList")
+                    binding.bluetoothSearchingBar.isVisible = false
+                    if (deviceList.size == 0) {
+                        binding.noDeviceText.isVisible = true
+                    }
+                }
+            }
+        }
+    }
 
     private fun bluetoothSwitch() {
         if (bluetoothAdapter == null) {
