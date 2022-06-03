@@ -39,6 +39,7 @@ class MainActivity : AppCompatActivity() {
 
         bluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
 
+        // Find pairing device
         val pairedDevice: Set<BluetoothDevice>? = bluetoothAdapter?.bondedDevices
         Log.d("debug", "PAIRED: $pairedDevice")
         pairedDevice?.forEach { device ->
@@ -47,13 +48,16 @@ class MainActivity : AppCompatActivity() {
             val result = BluetoothData(deviceName, deviceMAC)
             pairedList.add(result)
         }
-
         pairedList.add(BluetoothData("EX1", "0C:75:D2:AA"))
 
+        // Bluetooth receiver
         val filter = IntentFilter().apply {
             addAction(BluetoothDevice.ACTION_FOUND)
             addAction(BluetoothAdapter.ACTION_DISCOVERY_STARTED)
             addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)
+            addAction(BluetoothDevice.ACTION_ACL_CONNECTED)
+            addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED)
+            addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
         }
         registerReceiver(receiver, filter)
 
@@ -157,7 +161,48 @@ class MainActivity : AppCompatActivity() {
                         binding.noDeviceText.isVisible = true
                     }
                 }
+                BluetoothDevice.ACTION_ACL_CONNECTED -> {
+                    Log.d("debug", "receiver: bluetooth connected")
+                }
+                BluetoothDevice.ACTION_ACL_DISCONNECTED -> {
+                    Log.d("debug", "receiver: bluetooth disconnected")
+                }
+                BluetoothAdapter.ACTION_STATE_CHANGED -> {
+                    bluetoothChecker(intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, -1))
+                    // 10: STATE_OFF, 11: STATE_TURNING_ON, 12: STATE_ON, 13: STATE_TURNING_OFF
+                }
             }
+        }
+    }
+
+    private fun bluetoothChecker(state: Int) {
+        when(state) {
+            10 -> {
+                // STATE_OFF
+                bluetoothView(false)
+            }
+            11 -> {
+                // STATE_TURNING_ON
+            }
+            12 -> {
+                // STATE_ON
+                bluetoothView(true)
+            }
+            13 -> {
+                // STATE_TURNING_OFF
+            }
+        }
+    }
+
+    private fun bluetoothView(isBluetoothOn: Boolean) {
+        if (isBluetoothOn) {
+            binding.textView.text = "Bluetooth ON"
+            binding.bluetoothBtn.text = "OFF"
+            binding.bluetoothScanBtn.isVisible = true;
+        } else {
+            binding.textView.text = "Bluetooth OFF"
+            binding.bluetoothBtn.text = "ON"
+            binding.bluetoothScanBtn.isVisible = false;
         }
     }
 
